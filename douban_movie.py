@@ -4,6 +4,7 @@ from urllib.request import Request
 from urllib.error import *
 import time
 import openpyxl
+import os
 
 headers = {'User-Agent':
                'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/45.0.2454.101 Safari/537.36'}
@@ -14,6 +15,7 @@ class DoubanMovieSpider:
         self.baseurl = url
         self.movieurlfile = movieurlfile
         self.movieinfos = []
+        self.movierating = {}
 
     def getmovieurl(self):
         f = open(self.movieurlfile, 'w', encoding='utf-8')
@@ -46,7 +48,8 @@ class DoubanMovieSpider:
         with open(self.movieurlfile, 'r', encoding='utf-8') as f:
             movieurls = f.readlines()
         for url in movieurls:
-            print(url)
+            #print(url)
+
             movieinfo = []
             try:
                 res = Request(url, headers=headers)
@@ -109,11 +112,68 @@ class DoubanMovieSpider:
             for t in movieinfo:
                 sheet.cell(row = i, column = col).value = t.split(':')[1].strip()
                 col += 1
+        i+=1
 
         wb.save(filename)
 
 
+    def getMovieScore(self):
+        with open(self.movieurlfile, 'r', encoding='utf-8') as f:
+            movieurls = f.read().split('\n')
+        os.mkdir('movierating')
+        i = 1
+        for url in movieurls:
+            movieurl = url + 'collections?start='
+            self.movierating.setdefault(i, {})
+            page = 0
+            while True:
+                url = movieurl + str(page * 20)
+
+                print(url)
+                try:
+                    res = Request(url, headers=headers)
+                    html = urlopen(url).read().decode('utf-8')
+                except (HTTPError, URLError) as e:
+                    if hasattr(e, 'code'):
+                        print(e.code)
+                    if hasattr(e, 'reason'):
+                        print(e.reason)
+                except Exception as e:
+                    print(e)
+                    continue
+
+                soup = BeautifulSoup(html, 'lxml')
+                if len(soup) == 0:
+                    break
+
+                scorelist = soup.find('div',{'class':'sub_ins'}).findAll('table')
+                for list in scorelist:
+                    #print(list)
+                    name = list.find('div', class_='pl2').a.text.strip()
+                    name = name.split('\n')[0]
+                    try:
+                        score = list.find('p', {'class':'pl'}).findAll('span')[-1]['class']
+                    except:
+                        continue
+                    score = "".join(score).strip()[-2:]
+                    self.movierating[i][name] = score
+                    #print(name + ': ' + score)
+
+
+                page = page + 1
+            filename = str(i)
+            f = open('movierating/filename', 'w', encoding='utf-8')
+            for (key, val) in self.movierating[i].items():
+                f.write(key + ':' + val + '\n')
+            f.close()
+            i+=1
+
+
+
+
+
 
 douban = DoubanMovieSpider('https://movie.douban.com/top250', ' movieurl.txt')
-douban.getMovieInfo()
-douban.writetofile('douban_movie_top250.xlsx')
+#douban.getMovieInfo()
+#douban.writetofile('douban_movie_top250.xlsx')
+douban.getMovieScore()
